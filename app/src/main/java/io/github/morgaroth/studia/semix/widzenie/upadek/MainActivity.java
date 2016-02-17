@@ -1,7 +1,8 @@
 package io.github.morgaroth.studia.semix.widzenie.upadek;
 
-import android.app.Activity;
+import android.app.*;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -18,12 +19,18 @@ import java.util.logging.Logger;
 
 public class MainActivity extends Activity implements SensorEventListener {
 
+    public static final int MIN_FALL_TIME = 170;
+
     final Logger log = Logger.getLogger(MainActivity.class.getSimpleName());
 
     private SensorManager senSensorManager;
     private Sensor senAccelerometer;
     private Sensor senMagnetic;
     private Sensor senGravity;
+
+    private boolean fallStarted = false;
+    private boolean fallDetected = false;
+    private long fallStartTime = System.currentTimeMillis();
 
     List<Float> buff = new LinkedList<Float>();
 
@@ -100,10 +107,51 @@ public class MainActivity extends Activity implements SensorEventListener {
 
         if (Math.abs(e[0]) > LOW_FILTER || Math.abs(e[1]) > LOW_FILTER || Math.abs(e[2]) > LOW_FILTER) {
             log.info(String.format("%3.5f, %3.5f, %3.5f", e[0], e[1], e[2]));
+            log.info("Fall started: " + fallStarted + ", fall detected: " + fallDetected);
+            if (fallStarted) {
+                log.info("Fall time: " + (System.currentTimeMillis() - fallStartTime) + " ms");
+            }
             // przyspieszenie do ziemi jest w e[1] wektor jest skierowany w dół, więc spadanie jest dodatnie, podrzucanie ujemne
 //            buff.add(e[2]);
-        }
 
+            if (e[1] >= 9.0 && e[1] <= 11.0) {
+                if (fallDetected) {
+                    FragmentManager fragmentManager = getFragmentManager();
+                    Fragment fragment = fragmentManager.findFragmentByTag("fall_detected");
+                    if (fragment == null || !fragment.isAdded()) {
+                        DialogFragment dialogFragment = new DialogFragment() {
+                            @Override
+                            public Dialog onCreateDialog(Bundle savedInstanceState) {
+                                setRetainInstance(true);
+
+                                return new AlertDialog.Builder(getActivity())
+                                        .setTitle("Uwaga")
+                                        .setMessage("Wykryto upadek!")
+                                        .setNeutralButton(android.R.string.ok, new DialogInterface.OnClickListener()
+                                        {
+                                            @Override
+                                            public void onClick(DialogInterface dialog, int which)
+                                            {
+                                                dialog.dismiss();
+                                            }
+                                        })
+                                        .create();
+                            }
+                        };
+                        dialogFragment.show(fragmentManager, "fall_detected");
+                    }
+                }
+                if (!fallStarted) {
+                    fallStarted = true;
+                    fallStartTime = System.currentTimeMillis();
+                } else if (System.currentTimeMillis() - fallStartTime >= MIN_FALL_TIME){
+                    fallDetected = true;
+                }
+            } else {
+                fallStarted = false;
+                fallDetected = false;
+            }
+        }
     }
 
     public void onGravChanged(SensorEvent sensorEvent) {
